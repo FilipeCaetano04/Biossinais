@@ -81,6 +81,69 @@ def plot_boxplot(df: pd.DataFrame, leads: List[str], output_path: str) -> None:
     plt.close()
 
 
+def sample_points_per_label(df: pd.DataFrame, max_points_per_label: int = 100000, random_state: int = 42) -> pd.DataFrame:
+    sampled = []
+    for label, group in df.groupby("label"):
+        n_take = min(len(group), max_points_per_label)
+        sampled.append(group.sample(n=n_take, random_state=random_state) if n_take < len(group) else group)
+    return pd.concat(sampled, ignore_index=True)
+
+
+def sample_balanced_by_ecg(df: pd.DataFrame, max_ecg_per_label: int = 120, random_state: int = 42) -> pd.DataFrame:
+    ecg_label = df[["ecg_id", "label"]].drop_duplicates()
+    counts = ecg_label["label"].value_counts()
+    min_count = int(counts.min())
+    n_per_label = min(min_count, max_ecg_per_label)
+
+    selected_ids = []
+    for label, group in ecg_label.groupby("label"):
+        sampled = group.sample(n=n_per_label, random_state=random_state)
+        selected_ids.extend(sampled["ecg_id"].tolist())
+
+    return df[df["ecg_id"].isin(selected_ids)].copy()
+
+
+def plot_boxplot_stratified_by_label(df: pd.DataFrame, leads: List[str], output_path: str, max_points_per_label: int = 80000) -> None:
+    sns.set_theme(style="whitegrid")
+    df_plot = sample_points_per_label(df, max_points_per_label=max_points_per_label)
+    long_df = df_plot[["label"] + leads].melt(id_vars="label", var_name="Derivacao", value_name="Amplitude")
+
+    g = sns.catplot(
+        data=long_df,
+        x="Derivacao",
+        y="Amplitude",
+        col="label",
+        kind="box",
+        col_wrap=3,
+        sharey=True,
+        showfliers=False,
+        color="#76b7b2",
+        height=3.2,
+        aspect=1.35,
+    )
+    g.fig.suptitle("E3 - Boxplot Estratificado por Classe", y=1.02)
+    g.set_axis_labels("Derivacao", "Amplitude")
+    g.tight_layout()
+    g.savefig(output_path, dpi=220)
+    plt.close(g.fig)
+
+
+def plot_boxplot_balanced_for_visualization(df: pd.DataFrame, leads: List[str], output_path: str, max_ecg_per_label: int = 120) -> None:
+    sns.set_theme(style="whitegrid")
+    df_balanced = sample_balanced_by_ecg(df, max_ecg_per_label=max_ecg_per_label)
+    long_df = df_balanced[["label"] + leads].melt(id_vars="label", var_name="Derivacao", value_name="Amplitude")
+
+    plt.figure(figsize=(15, 7))
+    sns.boxplot(data=long_df, x="Derivacao", y="Amplitude", hue="label", showfliers=False, linewidth=0.7)
+    plt.title("E3 - Boxplot Balanceado por Classe (Amostragem por ECG)")
+    plt.xlabel("Derivacao")
+    plt.ylabel("Amplitude")
+    plt.legend(title="Label", bbox_to_anchor=(1.01, 1), loc="upper left")
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=220)
+    plt.close()
+
+
 def plot_qq(df: pd.DataFrame, leads: List[str], output_path: str, sample_n: int = 5000) -> None:
     fig, axes = plt.subplots(4, 3, figsize=(16, 14))
     axes = axes.flatten()
@@ -155,13 +218,17 @@ def run_e3(
     stats_df = descriptive_statistics(df_raw, LEADS)
     corr_df = correlation_analysis(df_raw, LEADS)
     integrity_df = validate_einthoven_goldberger(df_raw)
+    ecg_label_counts = df_raw[["ecg_id", "label"]].drop_duplicates()["label"].value_counts().rename("ecg_count")
 
     stats_df.to_csv(os.path.join(output_dir, "descriptive_statistics.csv"), index=True)
     corr_df.to_csv(os.path.join(output_dir, "correlation_matrix.csv"), index=True)
     integrity_df.to_csv(os.path.join(output_dir, "einthoven_goldberger_validation.csv"), index=False)
+    ecg_label_counts.to_csv(os.path.join(output_dir, "ecg_counts_per_label.csv"), index=True)
 
     plot_histograms(df_raw, LEADS, os.path.join(output_dir, "histograms_leads.png"))
     plot_boxplot(df_raw, LEADS, os.path.join(output_dir, "boxplot_leads.png"))
+    plot_boxplot_stratified_by_label(df_raw, LEADS, os.path.join(output_dir, "boxplot_stratified_by_label.png"))
+    plot_boxplot_balanced_for_visualization(df_raw, LEADS, os.path.join(output_dir, "boxplot_balanced_by_label.png"))
     plot_qq(df_raw, LEADS, os.path.join(output_dir, "qqplot_leads.png"))
     plot_correlation_heatmap(corr_df, os.path.join(output_dir, "correlation_heatmap.png"))
 
