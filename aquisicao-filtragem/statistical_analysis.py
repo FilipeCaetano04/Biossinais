@@ -1,5 +1,6 @@
 import os
-from typing import Dict, List
+import re
+from typing import Dict, List, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -17,6 +18,31 @@ def load_raw_data(csv_path: str = "../data/raw_data.csv") -> pd.DataFrame:
         if col not in df.columns:
             raise ValueError(f"Derivacao ausente no dataset: {col}")
     return df
+
+
+def load_quality_data(csv_path: str = "../data/quality_data_raw.csv") -> pd.DataFrame:
+    df = pd.read_csv(csv_path)
+    required_cols = [
+        "ecg_id",
+        "segment_id",
+        "derivation",
+        "label_clinico",
+        "discard_segment",
+        "discard_patient",
+    ]
+    for col in required_cols:
+        if col not in df.columns:
+            raise ValueError(f"Coluna ausente em quality_data_raw: {col}")
+    return df
+
+
+def parse_segment_id(segment_id: str) -> Tuple[int, int]:
+    match = re.fullmatch(r"seg_(\d+)a(\d+)s", str(segment_id))
+    if not match:
+        raise ValueError(f"segment_id invalido: {segment_id}")
+    start_sec = int(match.group(1))
+    end_sec = int(match.group(2))
+    return start_sec, end_sec
 
 
 def descriptive_statistics(df: pd.DataFrame, leads: List[str]) -> pd.DataFrame:
@@ -47,6 +73,92 @@ def descriptive_statistics(df: pd.DataFrame, leads: List[str]) -> pd.DataFrame:
     desc = desc.rename(columns=rename_map)
     ordered_cols = ["count", "mean", "median", "variance", "std", "min", "q1", "q3", "iqr", "max", "outlier_pct"]
     return desc[ordered_cols]
+
+
+def descriptive_statistics_segmented(
+    df_raw: pd.DataFrame,
+    df_quality: pd.DataFrame,
+    leads: List[str],
+    fs: int = 500,
+) -> pd.DataFrame:
+    discard_segment = df_quality["discard_segment"]
+    discard_patient = df_quality["discard_patient"]
+    if discard_segment.dtype == object:
+        discard_segment = discard_segment.astype(str).str.lower().map({"true": True, "false": False})
+    if discard_patient.dtype == object:
+        discard_patient = discard_patient.astype(str).str.lower().map({"true": True, "false": False})
+
+    df_quality_filtered = df_quality.loc[
+        (~discard_segment.fillna(True)) & (~discard_patient.fillna(True))
+    ].copy()
+
+    raw_by_ecg = {ecg_id: group for ecg_id, group in df_raw.groupby("ecg_id", sort=False)}
+    segment_records: Dict[Tuple[int, str, str], Dict[str, float]] = {}
+
+    for row in df_quality_filtered.itertuples(index=False):
+        ecg_id = row.ecg_id
+        segment_id = row.segment_id
+        derivation = row.derivation
+        label_clinico = row.label_clinico
+
+        if derivation not in leads:
+            continue
+        if ecg_id not in raw_by_ecg:
+            continue
+
+        try:
+            start_sec, end_sec = parse_segment_id(segment_id)
+        except ValueError:
+            continue
+
+        start_idx = start_sec * fs
+        end_idx = end_sec * fs
+
+        ecg_df = raw_by_ecg[ecg_id]
+        signal = ecg_df[derivation].to_numpy()
+
+        if end_idx > len(signal):
+            continue
+
+        segment = signal[start_idx:end_idx]
+        if len(segment) == 0:
+            continue
+
+        series = pd.Series(segment).dropna()
+        if series.empty:
+            continue
+
+        key = (ecg_id, segment_id, label_clinico)
+        if key not in segment_records:
+            segment_records[key] = {}
+
+        segment_records[key][f"mean_{derivation}"] = float(series.mean())
+        segment_records[key][f"median_{derivation}"] = float(series.median())
+        segment_records[key][f"variance_{derivation}"] = float(series.var())
+        segment_records[key][f"std_{derivation}"] = float(series.std())
+
+    metric_names = ["mean", "median", "variance", "std"]
+    output_cols = ["ecg_id", "segment_id", "label"] + [f"{metric}_{lead}" for lead in leads for metric in metric_names]
+
+    if not segment_records:
+        return pd.DataFrame(columns=output_cols)
+
+    rows = []
+    for (ecg_id, segment_id, label_clinico), metrics in segment_records.items():
+        row = {
+            "ecg_id": ecg_id,
+            "segment_id": segment_id,
+            "label": label_clinico,
+        }
+        row.update(metrics)
+        rows.append(row)
+
+    df_segmented = pd.DataFrame(rows)
+    for col in output_cols:
+        if col not in df_segmented.columns:
+            df_segmented[col] = np.nan
+
+    return df_segmented[output_cols].sort_values(["ecg_id", "segment_id"]).reset_index(drop=True)
 
 
 def plot_histograms(df: pd.DataFrame, leads: List[str], output_path: str) -> None:
@@ -210,17 +322,21 @@ def validate_einthoven_goldberger(df: pd.DataFrame) -> pd.DataFrame:
 
 def run_e3(
     input_csv: str = "../data/raw_data.csv",
-    output_dir: str = "../data/e3_outputs",
+    quality_csv: str = "../data/quality_data_raw.csv",
+    output_dir: str = "../data/statistical_analysis_outputs",
 ) -> None:
     os.makedirs(output_dir, exist_ok=True)
     df_raw = load_raw_data(input_csv)
+    df_quality = load_quality_data(quality_csv)
 
     stats_df = descriptive_statistics(df_raw, LEADS)
+    stats_segmented_df = descriptive_statistics_segmented(df_raw, df_quality, LEADS, fs=500)
     corr_df = correlation_analysis(df_raw, LEADS)
     integrity_df = validate_einthoven_goldberger(df_raw)
     ecg_label_counts = df_raw[["ecg_id", "label"]].drop_duplicates()["label"].value_counts().rename("ecg_count")
 
     stats_df.to_csv(os.path.join(output_dir, "descriptive_statistics.csv"), index=True)
+    stats_segmented_df.to_csv(os.path.join(output_dir, "descriptive_statistics_segmented.csv"), index=False)
     corr_df.to_csv(os.path.join(output_dir, "correlation_matrix.csv"), index=True)
     integrity_df.to_csv(os.path.join(output_dir, "einthoven_goldberger_validation.csv"), index=False)
     ecg_label_counts.to_csv(os.path.join(output_dir, "ecg_counts_per_label.csv"), index=True)
@@ -234,6 +350,7 @@ def run_e3(
 
     print("E3 concluido com sucesso.")
     print(f"Arquivo de entrada: {input_csv}")
+    print(f"Arquivo de qualidade: {quality_csv}")
     print(f"Saidas geradas em: {output_dir}")
 
 
