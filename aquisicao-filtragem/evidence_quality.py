@@ -299,11 +299,11 @@ class Visualizer:
 if __name__ == '__main__':
     print("\n--- EVIDENCE ---")
     df_raw = CreateDataRaw.create_dataframe(
-        number_of_pacients=10, 
+        number_of_pacients=1000,
         data_path="../ignored_data/00000/", 
         data_label="../data500/ptbxl_database.csv",
         shuffle=False,
-        to_csv=False #saves to csv or not
+        to_csv=True #saves to csv or not
     )
     df_sqi = SignalQualityEvaluator.evaluate_quality(df_raw, fs=500)
     df_sqi.to_csv('../data/quality_data_raw.csv')
