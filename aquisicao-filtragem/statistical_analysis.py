@@ -320,7 +320,7 @@ def validate_einthoven_goldberger(df: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(validations).T.reset_index().rename(columns={"index": "equation"})
 
 
-def run_e3(
+def run_statistical_analysis(
     input_csv: str = "../data/raw_data.csv",
     quality_csv: str = "../data/quality_data_raw.csv",
     output_dir: str = "../data/statistical_analysis_outputs",
@@ -355,4 +355,4 @@ def run_e3(
 
 
 if __name__ == "__main__":
-    run_e3()
+    run_statistical_analysis()
