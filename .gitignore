@@ -2,3 +2,5 @@
 */__pycache__
 ignored_data/
 data/raw_data.csvdata/raw_data.csv
+data/raw_data.csv
+data/quality_data_raw.csv
