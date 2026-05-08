@@ -1,8 +1,13 @@
 from pathlib import Path
 
-from evidence_quality import CreateDataRaw, SignalQualityEvaluator
-from pca_from_statistical_analysis import main as run_pca_statistic
-from statistical_analysis import run_statistical_analysis
+from src.aquisicao_filtragem.evidence_quality import (
+    CreateDataRaw,
+    SignalQualityEvaluator,
+)
+from src.dimensionality_reduction.pca_from_statistical_analysis import (
+    main as run_pca_statistic,
+)
+from src.aquisicao_filtragem.statistical_analysis import run_statistical_analysis
 
 
 def run_pipeline(
@@ -31,7 +36,9 @@ def run_pipeline(
         shuffle=shuffle,
         to_csv=True,
     )
-    df_quality = SignalQualityEvaluator.evaluate_quality(df_raw, fs=fs, window_sec=window_sec)
+    df_quality = SignalQualityEvaluator.evaluate_quality(
+        df_raw, fs=fs, window_sec=window_sec
+    )
     df_quality.to_csv(quality_csv, index=False)
     print(f"Raw salvo em: {raw_csv}")
     print(f"Quality salvo em: {quality_csv}")
