@@ -9,6 +9,11 @@ from scipy.signal import welch
 import seaborn as sns
 import matplotlib.patches as patches
 import matplotlib.pyplot as plt
+import random
+from signal_cleaning_validation import ECGSignalCleaner, plotar_comparacao_filtros
+from ica import  plotar_ica_estatico, ICA, remove_outliers, PCA_SIMPLE
+from feature_extraction_fft import validation_extraction
+from wavelet import gerar_features_clinicas
 
 class CreateDataRaw:
     """
@@ -43,7 +48,7 @@ class CreateDataRaw:
         if shuffle:
             selected_ids = np.random.choice(available_indices, number_of_pacients, replace=False)
         else:
-            selected_ids = available_indices[:number_of_pacients]
+            selected_ids = available_indices[0:number_of_pacients]
         
         all_records = []
 
@@ -86,6 +91,7 @@ class CreateDataRaw:
 
         print(f"Loaded registry of {number_of_pacients} pacients, {len(df_final)} registers")
         print(df_final.head(10))
+        df_final = df_final.drop(df_final[df_final['label'] == 'OTHER'].index)
         
         if to_csv: 
             df_final.to_csv("../data/raw_data.csv")
@@ -194,6 +200,77 @@ class SignalQualityEvaluator:
             all_sqi_records.append(df_patient)
 
         return pd.concat(all_sqi_records, ignore_index=True) if all_sqi_records else pd.DataFrame()
+    
+    @classmethod
+    def remove_bad_data(cls,df_quality:pd.DataFrame):
+        df_quality['ecg_id'] = df_quality['ecg_id'].astype(int)
+        
+        # Convertemos para numérico antes de filtrar pra garantir
+        df_quality['discard_segment'] = pd.to_numeric(df_quality['discard_segment'], errors='coerce')
+        df_quality['discard_patient'] = pd.to_numeric(df_quality['discard_patient'], errors='coerce')
+        
+        df_validos:pd.DataFrame = df_quality[
+            (df_quality['discard_segment'] == 0) &
+            (df_quality['discard_patient'] == 0)
+        ].copy()
+        
+        print(f"📊 Linhas após filtro de qualidade: {len(df_validos)}")
+        if len(df_validos) == 0:
+            print("❌ ERRO: O filtro de qualidade removeu TUDO. Verifique os valores de discard_segment/patient.")
+            return pd.DataFrame()
+        
+        print("Estatisticas dos df_validos:")
+        print(f"Quantidade de dados:\nNovo->{df_validos.shape}\n->antigo:{df_quality.shape}")
+        print(f"Quantidade de pacientes unicos:\nNovo->{df_validos['ecg_id'].nunique()}\nAntigo->{df_quality['ecg_id'].nunique()}")
+
+        return df_validos
+    
+    @classmethod
+    def balancear_classes_undersampling(cls,df: pd.DataFrame, label_col='label', max_ratio=3):
+        """
+        Reduz as classes majoritárias (Undersampling) para que nenhuma classe tenha 
+        mais do que `max_ratio` vezes o tamanho da menor classe.
+        """
+        print("📊 Distribuição ANTES do balanceamento:")
+        contagem_antes = df[label_col].value_counts()
+        print(contagem_antes.to_string())
+        
+        # 1. Encontra qual é a classe com menos dados e define o teto
+        min_count = contagem_antes.min()
+        max_permitido = min_count * max_ratio
+        
+        print(f"\n🎯 A menor classe tem {min_count} amostras.")
+        print(f"✂️ Limite máximo definido para {max_permitido} amostras por classe (Ratio: {max_ratio}x).\n")
+        
+        lista_dfs = []
+        
+        # 2. Avalia cada classe separadamente
+        for classe in contagem_antes.index:
+            df_classe = df[df[label_col] == classe]
+            qtd_atual = len(df_classe)
+            
+            if qtd_atual > max_permitido:
+                # Sorteia aleatoriamente as linhas para reduzir até o limite
+                # random_state=42 garante que você pode rodar 10x e ele corta os mesmos pacientes
+                df_classe_reduzida = df_classe.sample(n=max_permitido, random_state=42)
+                print(f"  🔻 Classe {classe}: Reduzida de {qtd_atual} para {max_permitido}.")
+                lista_dfs.append(df_classe_reduzida)
+            else:
+                print(f"  ✔️ Classe {classe}: Mantida intacta com {qtd_atual} amostras.")
+                lista_dfs.append(df_classe)
+                
+        # 3. Junta tudo em um único DataFrame
+        df_balanceado = pd.concat(lista_dfs)
+        
+        # 4. EMBARALHAMENTO (Crucial para Machine Learning)
+        # O sample(frac=1) embaralha 100% das linhas. Se não fizermos isso, 
+        # o algoritmo vai ler todos os normais, depois todos os infartos... e isso pode viciar o modelo.
+        df_balanceado = df_balanceado.sample(frac=1, random_state=42).reset_index(drop=True)
+        
+        print("\n✅ Balanceamento concluído! Nova distribuição:")
+        print(df_balanceado[label_col].value_counts().to_string())
+        
+        return df_balanceado
 
 
 
@@ -201,18 +278,34 @@ class SignalQualityEvaluator:
 class Visualizer:
 
     @staticmethod
-    def plot_class_distribution(df_raw):
+    def plot_class_distribution(df:pd.DataFrame, title_suffix=""):
         """Class distribution based on df_raw"""
         plt.figure(figsize=(8, 5))
-        counts = df_raw['label'].value_counts() / 5000
+        label_col = [c for c in df.columns if c.startswith("label")]
+        counts = df.groupby(label_col[0])['ecg_id'].nunique().sort_values(ascending=False)
+    
+        # Transformar em DataFrame para o Seaborn
         df_counts = counts.reset_index()
-        df_counts.columns = ['label', 'pacients_count']
+        df_counts.columns = ['Diagnostic', 'Patient_Count']
 
-        sns.barplot(data=df_counts, y='pacients_count', x='label', palette='viridis',hue='label')
-        plt.title('Class distribution based on df_raw', fontsize=14)
-        plt.xlabel('Clinic diagnostic', fontsize=12)
-        plt.ylabel('Pacients number', fontsize=12)
-        plt.grid(axis='y', linestyle='--', alpha=0.7)
+        # 3. Plotagem
+        sns.barplot(
+            data=df_counts, 
+            x='Diagnostic', 
+            y='Patient_Count', 
+            palette='viridis', 
+            hue='Diagnostic',
+            legend=False
+        )
+
+        # Adicionar os números exatos no topo das barras
+        for i, v in enumerate(df_counts['Patient_Count']):
+            plt.text(i, v + (v * 0.01), str(v), ha='center', fontweight='bold')
+
+        plt.title(f'Distribuição de Pacientes Únicos por Classe {title_suffix}', fontsize=14)
+        plt.xlabel('Diagnóstico Clínico', fontsize=12)
+        plt.ylabel('Número de Pacientes', fontsize=12)
+        plt.grid(axis='y', linestyle='--', alpha=0.6)
         plt.tight_layout()
         plt.show()
 
@@ -293,6 +386,68 @@ class Visualizer:
         plt.tight_layout()
         plt.show()
 
+    @classmethod
+    def plotar_amostras_aleatorias(cls,df_raw, lead="II" ,freq=500):
+        """
+        Sorteia um paciente de cada classe clínica e plota o sinal da derivação II.
+        """
+        # 1. Busca inteligente da coluna de label (mesma lógica robusta de antes)
+        label_col = [c for c in df_raw.columns if c.startswith("label")][0]
+
+        # 2. Identifica todas as classes clínicas únicas (você mencionou 6)
+        classes_unicas = df_raw[label_col].dropna().unique()
+        n_classes = len(classes_unicas)
+
+        # 3. Prepara a Figura (N linhas x 1 coluna)
+        # A altura ajusta dinamicamente dependendo da quantidade de classes
+        fig, axes = plt.subplots(nrows=n_classes, ncols=1, figsize=(10, 8), sharex=True, sharey=True)
+        
+        # Se por acaso tiver apenas 1 classe, axes não será uma lista, então forçamos ser
+        if n_classes == 1:
+            axes = [axes]
+
+        # 4. Loop por cada diagnóstico clínico
+        for ax, classe in zip(axes, classes_unicas):
+            # Filtra os dados para pegar apenas pacientes dessa doença
+            df_classe = df_raw[df_raw[label_col] == classe]
+            
+            # Lista os pacientes (ecg_id) únicos que têm esse diagnóstico
+            pacientes = df_classe['ecg_id'].unique()
+            
+            # Sorteia UM paciente dessa lista
+            paciente_sorteado = random.choice(pacientes)
+            
+            # Pega todas as linhas de sinal (o tempo todo) desse paciente sorteado
+            sinal_paciente = df_raw[df_raw['ecg_id'] == paciente_sorteado]
+            
+            # Verifica se a coluna 'II' existe, caso esteja nomeada diferente
+            coluna_derivação = f'{lead}' if f'{lead}' in sinal_paciente.columns else f'lead_{lead}'
+            
+            # Extrai os valores do sinal
+            sinal_II = sinal_paciente[coluna_derivação].values
+            
+            # Cria o eixo do tempo (amostras / frequência = segundos)
+            tempo = np.arange(len(sinal_II)) / freq
+            
+            # Plota no subplot
+            ax.plot(tempo, sinal_II, color='#2ca02c', linewidth=1.2)
+            
+            # Configurações visuais do subplot
+            ax.set_title(f'Diagnóstico: {classe} | Sorteado: Paciente {paciente_sorteado}', fontsize=11, fontweight='bold', loc='left')
+            ax.set_ylabel('Amplitude (mV)', fontsize=10)
+            ax.grid(True, linestyle='--', alpha=0.5)
+            
+            # Remove as bordas superior e direita para ficar mais "clean" (estilo artigo)
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+
+        # 5. Ajustes Finais do Gráfico Inteiro
+        plt.xlabel('Tempo (segundos)', fontsize=12, fontweight='bold')
+        plt.suptitle(f'Comparação da Derivação {lead} entre Diferentes Patologias (Amostras Aleatórias)', fontsize=15, y=1)
+        
+        plt.tight_layout()
+        plt.show()
+
 
 
 
@@ -303,19 +458,55 @@ if __name__ == '__main__':
         data_path="../ignored_data/00000/", 
         data_label="../data500/ptbxl_database.csv",
         shuffle=False,
-        to_csv=True #saves to csv or not
+        to_csv=False #saves to csv or not
     )
+    print("\n--- QUALITY ---")
     df_sqi = SignalQualityEvaluator.evaluate_quality(df_raw, fs=500)
     df_sqi.to_csv('../data/quality_data_raw.csv')
+    df_sqi = pd.read_csv('../data/quality_data_raw.csv')
 
+    df_not_bad_data = SignalQualityEvaluator.remove_bad_data(df_quality=df_sqi)
+
+    df_raw_filtrado_sqi = df_raw[df_raw['ecg_id'].isin(df_not_bad_data['ecg_id'].unique())].copy()
+    print(f"unicos em:{df_raw['label'].unique()}\n{df_not_bad_data['label_clinico'].unique()}")
     
-    print("\n--- QUALITY ---")
     print(df_sqi.head(60))
 
-    print('\n--- PLOTS ---')
-    Visualizer.plot_class_distribution(df_raw)
-    Visualizer.plot_raw_signal(df_raw, ecg_id=2)
-    Visualizer.plot_snr_boxplot(df_sqi)
+    print("\n-------FILTERED-------")
 
-    Visualizer.plot_segmented_quality(df_raw, df_sqi, ecg_id=2, derivacao='II')
+    df_filtered = ECGSignalCleaner.clean_signals(df_raw_filtrado_sqi,["I", "II", "III", "AVR", "AVL", "AVF", "V1", "V2", "V3", "V4", "V5", "V6"])
+
+    print(df_filtered.head())
+    #EXTRAÇÃO DE FEATURES:
+    df_features = validation_extraction(df_filtered,df_not_bad_data)
+    print(df_features.shape)
+    print(df_features.head(10))  
+    df_features = remove_outliers(df_features)
+    df_features_balanced = SignalQualityEvaluator.balancear_classes_undersampling(df_features, max_ratio=2)
+
+    print("\n------ PCA & ICA -------")
+    df_ica_features_stats = ICA(df_features_balanced, feature_cols=[col for col in df_features.columns if col not in ["ecg_id","segment_id","label"]])
+    df_pca_features_stats = PCA_SIMPLE(df_features_balanced, n_components=5)
+
+    print("----- WAVELET FEATURE EXTRACTION ------")
+    df_features_novas = gerar_features_clinicas(df_raw, df_not_bad_data)
+    df_ica = ICA(df_features_novas, feature_cols=[col for col in df_features_novas.columns if col not in ["ecg_id","segment_id","label"]])
+    df_pca = PCA_SIMPLE(df_features_novas, n_components=5)
+
+
+    print('\n--- PLOTS ---')
+    def plotter():
+        Visualizer.plot_class_distribution(df_raw)
+        Visualizer.plot_raw_signal(df_raw, ecg_id=2)
+        Visualizer.plot_snr_boxplot(df_sqi)
+        Visualizer.plotar_amostras_aleatorias(df_raw_filtrado_sqi)
+        plotar_comparacao_filtros(df_raw_filtrado_sqi,df_filtered)
+        Visualizer.plot_class_distribution(df_not_bad_data)
+        plotar_ica_estatico(df_ica_features_stats,"ICA FEATURE STATS")
+        plotar_ica_estatico(df_pca_features_stats, "PCA FEATURE STATS")
+        plotar_ica_estatico(df_ica, "ICA FEATURES WAVELET")
+        plotar_ica_estatico(df_pca, "PCA FEATURES WAVELET")
+
+    plotter()
+
     
