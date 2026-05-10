@@ -4,16 +4,17 @@ import wfdb
 import ast
 import neurokit2 as nk
 import os
+from pathlib import Path
 from scipy.stats import kurtosis, skew
 from scipy.signal import welch
 import seaborn as sns
 import matplotlib.patches as patches
 import matplotlib.pyplot as plt
 import random
-from signal_cleaning_validation import ECGSignalCleaner, plotar_comparacao_filtros
-from ica import plotar_ica_estatico, ICA, remove_outliers, PCA_SIMPLE
-from feature_extraction_fft import validation_extraction
-from wavelet import gerar_features_clinicas
+from .signal_cleaning_validation import ECGSignalCleaner, plotar_comparacao_filtros
+from .ica import plotar_ica_estatico, ICA, remove_outliers, PCA_SIMPLE
+from .feature_extraction_fft import validation_extraction
+from .wavelet import gerar_features_clinicas
 
 
 class CreateDataRaw:
@@ -37,11 +38,11 @@ class CreateDataRaw:
     def create_dataframe(
         cls,
         number_of_pacients: int,
-        data_path: str = "../ignored_data/00000/",
-        data_label: str = "../data500/ptbxl_database.csv",
-        scp_path: str = "../data500/scp_statements.csv",
-        shuffle: bool = False,
-        to_csv: bool = False,
+        data_path: str,
+        data_label: str,
+        scp_path: str,
+        shuffle: bool,
+        to_csv: bool,
     ) -> pd.DataFrame:
 
         db = pd.read_csv(data_label, index_col="ecg_id")
@@ -121,7 +122,9 @@ class CreateDataRaw:
         df_final = df_final.drop(df_final[df_final["label"] == "OTHER"].index)
 
         if to_csv:
-            df_final.to_csv("../data/raw_data.csv")
+            data_dir = Path("data")
+            data_dir.mkdir(parents=True, exist_ok=True)
+            df_final.to_csv(data_dir / "raw_data.csv", index=False)
 
         return df_final
 
@@ -565,15 +568,18 @@ if __name__ == "__main__":
     print("\n--- EVIDENCE ---")
     df_raw = CreateDataRaw.create_dataframe(
         number_of_pacients=1000,
-        data_path="../ignored_data/00000/",
-        data_label="../data500/ptbxl_database.csv",
+        data_path="./ignored_data/00000/",
+        data_label="./data500/ptbxl_database.csv",
         shuffle=False,
         to_csv=False,  # saves to csv or not
     )
     print("\n--- QUALITY ---")
     df_sqi = SignalQualityEvaluator.evaluate_quality(df_raw, fs=500)
-    df_sqi.to_csv("../data/quality_data_raw.csv")
-    df_sqi = pd.read_csv("../data/quality_data_raw.csv")
+    data_dir = Path("data")
+    data_dir.mkdir(parents=True, exist_ok=True)
+    quality_path = data_dir / "quality_data_raw.csv"
+    df_sqi.to_csv(quality_path, index=False)
+    df_sqi = pd.read_csv(quality_path)
 
     df_not_bad_data = SignalQualityEvaluator.remove_bad_data(df_quality=df_sqi)
 

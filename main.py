@@ -4,28 +4,29 @@ from src.aquisicao_filtragem.evidence_quality import (
     CreateDataRaw,
     SignalQualityEvaluator,
 )
-from src.dimensionality_reduction.pca_from_statistical_analysis import (
-    main as run_pca_statistic,
-)
 from src.aquisicao_filtragem.statistical_analysis import run_statistical_analysis
 from src.aquisicao_filtragem.signal_cleaning_validation import ECGSignalCleaner
 from src.aquisicao_filtragem.feature_extraction_fft import validation_extraction
 from src.aquisicao_filtragem.ica import *
 from src.aquisicao_filtragem.wavelet import gerar_features_clinicas
+from src.scripts.train_autoencoder import run_autoencoder_from_dataframe
 
 
 def run_pipeline(
     number_of_pacients: int = 1000,
-    data_path: str = "../ignored_data/00000/",
-    data_label: str = "../data500/ptbxl_database.csv",
-    scp_path: str = "../data500/scp_statements.csv",
+    data_path: str = "./ignored_data/00000/",
+    data_label: str = "./data500/ptbxl_database.csv",
+    scp_path: str = "./data500/scp_statements.csv",
     shuffle: bool = False,
     fs: int = 500,
     window_sec: int = 2,
+    autoencoder_latent_dim: int = 15,
+    autoencoder_epochs: int = 200,
 ) -> None:
-    data_dir = Path("../data")
+    data_dir = Path("./data")
     stats_output_dir = data_dir / "statistical_analysis_outputs"
     pca_output_dir = stats_output_dir / "pca"
+    autoencoder_output_dir = stats_output_dir / "autoencoder_wavelet"
     raw_csv = data_dir / "raw_data.csv"
     quality_csv = data_dir / "quality_data_raw.csv"
 
@@ -47,7 +48,7 @@ def run_pipeline(
     df_quality = SignalQualityEvaluator.evaluate_quality(
         df_raw_filtered, fs=fs, window_sec=window_sec
     )
-    # df_quality.to_csv(quality_csv, index=False)
+    df_quality.to_csv(quality_csv, index=False)
     df_filtered_sqi = SignalQualityEvaluator.remove_bad_data(df_quality)
 
     print(f"Raw salvo em: {raw_csv}")
@@ -70,7 +71,7 @@ def run_pipeline(
     print("[4/5] Rodando extração de features via wavelet")
     df_features_novas = gerar_features_clinicas(df_raw, df_filtered_sqi)
 
-    print("[5/5] Rodando pca´s e ica")
+    print("[5/5] Rodando pca´s, ica e autoencoder")
     run_pca_statistic(
         input_csv=stats_output_dir / "descriptive_statistics_segmented.csv",
         output_dir=pca_output_dir,
@@ -99,9 +100,22 @@ def run_pipeline(
     plotar_ica_estatico(df_ica, "ICA FEATURES WAVELET")
     plotar_ica_estatico(df_pca, "PCA FEATURES WAVELET")
 
+    ae_result = run_autoencoder_from_dataframe(
+        df=df_features_novas,
+        output_dir=autoencoder_output_dir,
+        latent_dim=autoencoder_latent_dim,
+        num_epochs=autoencoder_epochs,
+        n_pca_components=3,
+    )
+    print(
+        f"Autoencoder concluido. Latente: {ae_result['latent_shape']} | "
+        f"Saidas: {autoencoder_output_dir}"
+    )
+
     print("Pipeline concluido com sucesso.")
     print(f"Saidas estatisticas em: {stats_output_dir}")
     print(f"Saidas PCA em: {pca_output_dir}")
+    print(f"Saidas Autoencoder em: {autoencoder_output_dir}")
 
 
 if __name__ == "__main__":

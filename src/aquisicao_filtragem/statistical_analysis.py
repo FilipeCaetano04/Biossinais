@@ -12,7 +12,7 @@ from scipy import stats
 LEADS: List[str] = ["I", "II", "III", "AVR", "AVL", "AVF", "V1", "V2", "V3", "V4", "V5", "V6"]
 
 
-def load_raw_data(csv_path: str = "../data/raw_data.csv") -> pd.DataFrame:
+def load_raw_data(csv_path: str = "data/raw_data.csv") -> pd.DataFrame:
     df = pd.read_csv(csv_path)
     for col in LEADS:
         if col not in df.columns:
@@ -20,7 +20,7 @@ def load_raw_data(csv_path: str = "../data/raw_data.csv") -> pd.DataFrame:
     return df
 
 
-def load_quality_data(csv_path: str = "../data/quality_data_raw.csv") -> pd.DataFrame:
+def load_quality_data(csv_path: str = "data/quality_data_raw.csv") -> pd.DataFrame:
     df = pd.read_csv(csv_path)
     required_cols = [
         "ecg_id",
@@ -321,9 +321,9 @@ def validate_einthoven_goldberger(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def run_statistical_analysis(
-    input_csv: str = "../data/raw_data.csv",
-    quality_csv: str = "../data/quality_data_raw.csv",
-    output_dir: str = "../data/statistical_analysis_outputs",
+    input_csv: str = "data/raw_data.csv",
+    quality_csv: str = "data/quality_data_raw.csv",
+    output_dir: str = "data/statistical_analysis_outputs",
 ) -> None:
     os.makedirs(output_dir, exist_ok=True)
     df_raw = load_raw_data(input_csv)

@@ -427,12 +427,12 @@ def plotar_comparacao_filtros(
 
 if __name__ == "__main__":
     # run_cleaning_and_validation(
-    #     record_path="../ignored_data/00000/00001_hr",
-    #     output_dir="../data/cleaning_validation_outputs",
+    #     record_path="./ignored_data/00000/00001_hr",
+    #     output_dir="./data/cleaning_validation_outputs",
     # )
 
-    root = Path("../ignored_data")
-    out_root = Path("../data/cleaning_validation_outputs_all")
+    root = Path("ignored_data")
+    out_root = Path("data/cleaning_validation_outputs_all")
     out_root.mkdir(parents=True, exist_ok=True)
     # todos os registros de todos os subdiretorios
     record_bases = sorted(str(p).replace(".hea", "") for p in root.rglob("*_hr.hea"))

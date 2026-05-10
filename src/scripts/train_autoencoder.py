@@ -40,6 +40,11 @@ def resolve_paths(input_path=None, output_dir=None):
 
 def load_and_validate_data(input_path):
     df = pd.read_csv(input_path)
+    return load_and_validate_dataframe(df)
+
+
+def load_and_validate_dataframe(df):
+    df = df.copy()
 
     if "label" not in df.columns:
         raise ValueError("O CSV precisa ter uma coluna chamada 'label'.")
@@ -210,7 +215,7 @@ def plot_latent_space_2d(ae_df, output_dir):
 
     output_path = Path(output_dir) / "autoencoder_z1_z2.png"
     plt.savefig(output_path, dpi=220, bbox_inches="tight")
-    plt.show()
+    plt.close()
 
     return output_path
 
@@ -249,7 +254,7 @@ def plot_latent_space_3d(ae_df, output_dir):
     plt.tight_layout()
     output_path = Path(output_dir) / "autoencoder_z1_z2_z3.png"
     plt.savefig(output_path, dpi=220, bbox_inches="tight")
-    plt.show()
+    plt.close(fig)
 
     return output_path
 
@@ -279,7 +284,7 @@ def plot_latent_pca_2d(pca_df, output_dir):
 
     output_path = Path(output_dir) / "autoencoder_latent_pca_2d.png"
     plt.savefig(output_path, dpi=220, bbox_inches="tight")
-    plt.show()
+    plt.close()
 
     return output_path
 
@@ -318,9 +323,76 @@ def plot_latent_pca_3d(pca_df, output_dir):
     plt.tight_layout()
     output_path = Path(output_dir) / "autoencoder_latent_pca_3d.png"
     plt.savefig(output_path, dpi=220, bbox_inches="tight")
-    plt.show()
+    plt.close(fig)
 
     return output_path
+
+
+def run_autoencoder_from_dataframe(
+    df,
+    output_dir,
+    latent_dim=15,
+    batch_size=32,
+    num_epochs=200,
+    n_pca_components=3,
+    seed=42,
+):
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    X, metadata, feature_cols = load_and_validate_dataframe(df)
+    X_scaled, X_tensor, _, _ = preprocess_features(X)
+    train_loader, val_loader = create_dataloaders(
+        X_tensor, batch_size=batch_size, seed=seed
+    )
+
+    model, criterion, optimizer = build_model(
+        input_dim=X_scaled.shape[1], latent_dim=latent_dim, device=device
+    )
+
+    train_autoencoder(
+        model=model,
+        train_loader=train_loader,
+        val_loader=val_loader,
+        criterion=criterion,
+        optimizer=optimizer,
+        device=device,
+        num_epochs=num_epochs,
+    )
+
+    ae_df, latent = build_latent_dataframe(
+        model=model,
+        X_tensor=X_tensor,
+        metadata=metadata,
+        latent_dim=latent_dim,
+        device=device,
+    )
+
+    latent_scores_path = save_latent_scores(ae_df, output_dir)
+
+    pca_df, pca_model = run_pca_on_latent(
+        latent=latent, metadata=metadata, n_components=n_pca_components
+    )
+    latent_pca_scores_path = save_latent_pca_scores(pca_df, output_dir)
+
+    plot_latent_space_2d(ae_df, output_dir)
+    if latent_dim >= 3:
+        plot_latent_space_3d(ae_df, output_dir)
+
+    plot_latent_pca_2d(pca_df, output_dir)
+    if {"PC1", "PC2", "PC3"}.issubset(pca_df.columns):
+        plot_latent_pca_3d(pca_df, output_dir)
+
+    return {
+        "latent_scores_path": latent_scores_path,
+        "latent_pca_scores_path": latent_pca_scores_path,
+        "feature_columns": feature_cols,
+        "input_shape": X_scaled.shape,
+        "latent_shape": latent.shape,
+        "pca_explained_variance_ratio": pca_model.explained_variance_ratio_.tolist(),
+    }
 
 
 if __name__ == "__main__":
