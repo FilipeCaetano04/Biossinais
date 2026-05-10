@@ -16,7 +16,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List
-import pywt
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -268,24 +267,29 @@ def run_cleaning_and_validation(record_path: str, output_dir: str) -> pd.DataFra
 
     return df_validation
 
+
 import random
 from scipy.signal import butter, filtfilt, iirnotch
 
+
 class ECGSignalCleaner:
-    
     @classmethod
-    def _apply_notch_filter(cls, data: np.ndarray, fs: int, freq_to_remove=50.0, q=30.0) -> np.ndarray:
+    def _apply_notch_filter(
+        cls, data: np.ndarray, fs: int, freq_to_remove=50.0, q=30.0
+    ) -> np.ndarray:
         """Remove ruído da rede elétrica (50Hz / 60Hz)."""
         nyquist = fs / 2
         # Verifica se a frequência de amostragem suporta o filtro Notch
         if freq_to_remove >= nyquist:
-            return data 
-            
+            return data
+
         b, a = iirnotch(freq_to_remove, q, fs)
         return filtfilt(b, a, data)
 
     @classmethod
-    def _apply_bandpass_filter(cls, data: np.ndarray, fs: int, lowcut=0.5, highcut=40.0, order=4) -> np.ndarray:
+    def _apply_bandpass_filter(
+        cls, data: np.ndarray, fs: int, lowcut=0.5, highcut=40.0, order=4
+    ) -> np.ndarray:
         """
         High-pass (> 0.5Hz): Remove a oscilação da respiração.
         Low-pass (< 40Hz): Remove ruído muscular de alta frequência.
@@ -293,22 +297,24 @@ class ECGSignalCleaner:
         nyquist = fs / 2
         low = lowcut / nyquist
         high = highcut / nyquist
-        
+
         if high >= 1.0:
-            b, a = butter(order, low, btype='high')
+            b, a = butter(order, low, btype="high")
         else:
-            b, a = butter(order, [low, high], btype='band')
-            
+            b, a = butter(order, [low, high], btype="band")
+
         # padlen dinâmico para evitar erros em segmentos muito curtos
         padlen = min(len(data) - 1, 150)
         return filtfilt(b, a, data, padlen=padlen)
 
     @classmethod
-    def clean_signals(cls, df_raw: pd.DataFrame, leads: list, fs: int = 500, saveToCSV=False) -> pd.DataFrame:
+    def clean_signals(
+        cls, df_raw: pd.DataFrame, leads: list, fs: int = 500, saveToCSV=False
+    ) -> pd.DataFrame:
         """Aplica os filtros por paciente e segmento."""
         print(f"🧹 Iniciando limpeza do sinal (Frequência: {fs}Hz)...")
         df_clean: pd.DataFrame = df_raw.copy()
-        
+
         def process_group(group):
             g = group.copy()
             for lead in leads:
@@ -316,79 +322,105 @@ class ECGSignalCleaner:
                 # 1. Tira oscilação da rede elétrica (50Hz)
                 signal = cls._apply_notch_filter(signal, fs, freq_to_remove=50.0)
                 # 2. Tira Respiração (0.5Hz) e Ruído Muscular (40Hz)
-                signal = cls._apply_bandpass_filter(signal, fs, lowcut=0.5, highcut=40.0)
+                signal = cls._apply_bandpass_filter(
+                    signal, fs, lowcut=0.5, highcut=40.0
+                )
                 g[lead] = signal
             return g
 
-        group_cols = ['ecg_id']
-        if 'segment_id' in df_clean.columns:
-            group_cols.append('segment_id')
-            
+        group_cols = ["ecg_id"]
+        if "segment_id" in df_clean.columns:
+            group_cols.append("segment_id")
+
         # O apply garante que o filtro zere e reinicie para cada paciente/segmento
         df_clean = df_clean.groupby(group_cols, group_keys=False).apply(process_group)
-        
+
         print(f"✅ Limpeza concluída para as {len(leads)} derivações!")
         if saveToCSV:
             df_clean.to_csv("data/filtered_data.csv")
         return df_clean
 
-def plotar_comparacao_filtros(df_sujo: pd.DataFrame, df_limpo: pd.DataFrame, freq=500, n_classes=5):
+
+def plotar_comparacao_filtros(
+    df_sujo: pd.DataFrame, df_limpo: pd.DataFrame, freq=500, n_classes=5
+):
     """
     Sorteia um paciente para cada diagnóstico e plota a derivação II
     sobrepondo o sinal antes e depois do filtro.
     """
     # 1. Identificar coluna de label
-    label_col = 'label_clinico' if 'label_clinico' in df_sujo.columns else 'label'
+    label_col = "label_clinico" if "label_clinico" in df_sujo.columns else "label"
     if label_col not in df_sujo.columns:
         possiveis = [c for c in df_sujo.columns if c.startswith("label")]
-        label_col = possiveis[0] if possiveis else 'label'
+        label_col = possiveis[0] if possiveis else "label"
 
     # Pega as top N classes com mais dados para garantir que tem pacientes
     classes_disponiveis = df_sujo[label_col].value_counts().index.tolist()
     classes_selecionadas = classes_disponiveis[:n_classes]
 
     # Prepara a Figura
-    fig, axes = plt.subplots(nrows=n_classes, ncols=1, figsize=(12, 8), sharex=True, sharey=True)
-    if n_classes == 1: axes = [axes]
+    fig, axes = plt.subplots(
+        nrows=n_classes, ncols=1, figsize=(12, 8), sharex=True, sharey=True
+    )
+    if n_classes == 1:
+        axes = [axes]
 
     for ax, classe in zip(axes, classes_selecionadas):
         # Isola os pacientes dessa classe específica
-        pacientes_da_classe = df_sujo[df_sujo[label_col] == classe]['ecg_id'].unique()
-        
+        pacientes_da_classe = df_sujo[df_sujo[label_col] == classe]["ecg_id"].unique()
+
         # Sorteia UM paciente
         paciente_sorteado = random.choice(pacientes_da_classe)
-        
+
         # Extrai os dados do paciente SUJO e do LIMPO
-        sinal_sujo = df_sujo[df_sujo['ecg_id'] == paciente_sorteado]
-        sinal_limpo = df_limpo[df_limpo['ecg_id'] == paciente_sorteado]
-        
+        sinal_sujo = df_sujo[df_sujo["ecg_id"] == paciente_sorteado]
+        sinal_limpo = df_limpo[df_limpo["ecg_id"] == paciente_sorteado]
+
         # Pega a derivação II
-        coluna_lead = 'II' if 'II' in df_sujo.columns else 'lead_II'
+        coluna_lead = "II" if "II" in df_sujo.columns else "lead_II"
         y_sujo = sinal_sujo[coluna_lead].values
         y_limpo = sinal_limpo[coluna_lead].values
-        
+
         # Eixo do tempo real baseado na frequência (500Hz)
         tempo = np.arange(len(y_sujo)) / freq
-        
+
         # 🎨 PLOTAGEM
         # Sinal Sujo (Fundo vermelho claro, mais espesso e transparente)
-        ax.plot(tempo, y_sujo, color='lightcoral', linewidth=2.5, alpha=0.6, label='Sem Filtro (Original)')
+        ax.plot(
+            tempo,
+            y_sujo,
+            color="lightcoral",
+            linewidth=2.5,
+            alpha=0.6,
+            label="Sem Filtro (Original)",
+        )
         # Sinal Limpo (Frente azul escuro, mais fino e nítido)
-        ax.plot(tempo, y_limpo, color='#004c99', linewidth=1.2, label='Com Filtro (Limpo)')
-        
+        ax.plot(
+            tempo, y_limpo, color="#004c99", linewidth=1.2, label="Com Filtro (Limpo)"
+        )
+
         # Ajustes visuais de cada linha
-        ax.set_title(f'Diagnóstico: {classe} | Paciente Sorteado: ID {paciente_sorteado}', fontsize=12, fontweight='bold', loc='left')
-        ax.set_ylabel('Amplitude (mV)')
-        ax.grid(True, linestyle='--', alpha=0.4)
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
-        
+        ax.set_title(
+            f"Diagnóstico: {classe} | Paciente Sorteado: ID {paciente_sorteado}",
+            fontsize=12,
+            fontweight="bold",
+            loc="left",
+        )
+        ax.set_ylabel("Amplitude (mV)")
+        ax.grid(True, linestyle="--", alpha=0.4)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+
         # Legenda apenas no primeiro gráfico para não poluir
         if ax == axes[0]:
-            ax.legend(loc='upper right', fontsize=10, framealpha=0.9)
+            ax.legend(loc="upper right", fontsize=10, framealpha=0.9)
 
-    plt.xlabel('Tempo (segundos)', fontsize=12, fontweight='bold')
-    plt.suptitle('Efeito da Filtragem IIR (Notch 50Hz + Bandpass 0.5-40Hz) na Derivação II', fontsize=16, y=1.02)
+    plt.xlabel("Tempo (segundos)", fontsize=12, fontweight="bold")
+    plt.suptitle(
+        "Efeito da Filtragem IIR (Notch 50Hz + Bandpass 0.5-40Hz) na Derivação II",
+        fontsize=16,
+        y=1.02,
+    )
     plt.tight_layout()
     plt.show()
 
