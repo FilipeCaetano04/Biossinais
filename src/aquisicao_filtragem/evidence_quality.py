@@ -3,7 +3,6 @@ import numpy as np
 import wfdb
 import ast
 import neurokit2 as nk
-import os
 from pathlib import Path
 from scipy.stats import kurtosis, skew
 from scipy.signal import welch
@@ -11,6 +10,7 @@ import seaborn as sns
 import matplotlib.patches as patches
 import matplotlib.pyplot as plt
 import random
+from typing import Mapping, Sequence
 from .signal_cleaning_validation import ECGSignalCleaner, plotar_comparacao_filtros
 from .ica import plotar_ica_estatico, ICA, remove_outliers, PCA_SIMPLE
 from .feature_extraction_fft import validation_extraction
@@ -34,36 +34,109 @@ class CreateDataRaw:
         except:
             return "UNKNOWN"
 
+    @staticmethod
+    def build_record_index(data_path: str) -> dict[int, str]:
+        data_root = Path(data_path)
+        record_files = sorted(data_root.rglob("*_hr.hea"))
+        record_path_by_id: dict[int, str] = {}
+
+        for record_file in record_files:
+            stem = record_file.stem
+            if not stem.endswith("_hr"):
+                continue
+
+            ecg_id_str = stem[:-3]
+            try:
+                ecg_id = int(ecg_id_str)
+            except ValueError:
+                continue
+
+            record_path_by_id[ecg_id] = str(record_file.with_suffix(""))
+
+        return record_path_by_id
+
+    @classmethod
+    def list_available_record_ids(
+        cls,
+        data_path: str,
+        data_label: str,
+        record_index: Mapping[int, str] | None = None,
+    ) -> list[int]:
+        db = pd.read_csv(data_label, index_col="ecg_id")
+        available_indices = {int(idx) for idx in db.index.values}
+        index_map = dict(record_index) if record_index is not None else cls.build_record_index(data_path)
+        return sorted(ecg_id for ecg_id in index_map.keys() if ecg_id in available_indices)
+
     @classmethod
     def create_dataframe(
         cls,
         number_of_pacients: int,
+        process_all: bool,
         data_path: str,
         data_label: str,
         scp_path: str,
         shuffle: bool,
         to_csv: bool,
+        selected_ids: Sequence[int] | None = None,
+        record_index: Mapping[int, str] | None = None,
     ) -> pd.DataFrame:
 
         db = pd.read_csv(data_label, index_col="ecg_id")
         scp_st = pd.read_csv(scp_path, index_col=0)
         diag_map = scp_st[scp_st.diagnostic == 1]["diagnostic_class"].to_dict()
 
-        # indices selection (ecg_id) 1 to 21837
-        available_indices = db.index.values
-        if shuffle:
-            selected_ids = np.random.choice(
-                available_indices, number_of_pacients, replace=False
+        record_path_by_id = (
+            dict(record_index)
+            if record_index is not None
+            else cls.build_record_index(data_path)
+        )
+
+        available_indices = {int(idx) for idx in db.index.values}
+        available_record_ids = sorted(
+            ecg_id for ecg_id in record_path_by_id.keys() if ecg_id in available_indices
+        )
+
+        if not available_record_ids:
+            raise ValueError(
+                f"No records found in '{data_path}' that match '{data_label}'."
             )
+
+        if selected_ids is not None:
+            selected_ids = [int(ecg_id) for ecg_id in selected_ids if int(ecg_id) in record_path_by_id]
+            selected_ids = [ecg_id for ecg_id in selected_ids if ecg_id in available_indices]
+            if not selected_ids:
+                raise ValueError("No selected IDs matched available records and metadata.")
+        elif process_all:
+            selected_ids = available_record_ids
         else:
-            selected_ids = available_indices[0:number_of_pacients]
+            if number_of_pacients <= 0:
+                raise ValueError("number_of_pacients must be greater than zero.")
+
+            sample_size = min(number_of_pacients, len(available_record_ids))
+            if shuffle:
+                selected_ids = np.random.choice(
+                    available_record_ids, sample_size, replace=False
+                ).tolist()
+            else:
+                selected_ids = available_record_ids[:sample_size]
+
+        print(
+            "Discovered "
+            f"{len(record_path_by_id)} records in {data_path}; "
+            f"{len(available_record_ids)} match label metadata; "
+            f"processing {len(selected_ids)} records."
+        )
 
         all_records = []
+        total_ids = len(selected_ids)
+        progress_every = 250
 
-        for ecg_id in selected_ids:
+        for idx, ecg_id in enumerate(selected_ids, start=1):
             row = db.loc[ecg_id]
 
-            file_path = os.path.join(data_path, str(ecg_id).zfill(5) + "_hr")
+            file_path = record_path_by_id.get(int(ecg_id))
+            if file_path is None:
+                continue
 
             try:
                 record = wfdb.rdrecord(file_path)
@@ -85,6 +158,17 @@ class CreateDataRaw:
                 all_records.append(df_temp)
             except FileNotFoundError:
                 print(f"{file_path} not found, going to next one")
+
+            if idx % progress_every == 0 or idx == total_ids:
+                print(
+                    f"[CreateDataRaw] Loaded {idx}/{total_ids} records "
+                    f"({(100 * idx / total_ids):.1f}%)"
+                )
+
+        if not all_records:
+            raise ValueError(
+                "No records were loaded. Check dataset paths and metadata alignment."
+            )
 
         # final format
         df_final = pd.concat(all_records).reset_index()
@@ -116,7 +200,7 @@ class CreateDataRaw:
         df_final = df_final[[c for c in cols_order if c in df_final.columns]]
 
         print(
-            f"Loaded registry of {number_of_pacients} pacients, {len(df_final)} registers"
+            f"Loaded registry of {len(selected_ids)} pacients, {len(df_final)} registers"
         )
         print(df_final.head(10))
         df_final = df_final.drop(df_final[df_final["label"] == "OTHER"].index)
@@ -568,8 +652,10 @@ if __name__ == "__main__":
     print("\n--- EVIDENCE ---")
     df_raw = CreateDataRaw.create_dataframe(
         number_of_pacients=1000,
-        data_path="./ignored_data/00000/",
+        process_all=False,
+        data_path="./ignored_data",
         data_label="./data500/ptbxl_database.csv",
+        scp_path="./data500/scp_statements.csv",
         shuffle=False,
         to_csv=False,  # saves to csv or not
     )

@@ -107,6 +107,8 @@ def gerar_features_clinicas(df_raw: pd.DataFrame, df_not_bad_data: pd.DataFrame,
 
     # Monta a matriz de IA
     df_final = pd.DataFrame(lista_features)
+    if df_final.empty:
+        return pd.DataFrame(columns=['ecg_id', 'segment_id', 'label'])
     cols_ordem = ['ecg_id', 'segment_id', 'label'] + [c for c in df_final.columns if c not in ['ecg_id', 'segment_id', 'label']]
     print(f"\nConcluído - DWT! Matriz gerada. Shape: {df_final.shape}")
     return df_final[cols_ordem]

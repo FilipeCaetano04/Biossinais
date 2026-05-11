@@ -1,7 +1,8 @@
- __pycache__/
-.venv
-*/__pycache__
+__pycache__/
+*/__pycache__/
+*.pyc
+.venv/
 ignored_data/
-data/raw_data.csvdata/raw_data.csv
-data/raw_data.csv
-data/quality_data_raw.csv
+
+# Ignore generated datasets/results
+*.csv

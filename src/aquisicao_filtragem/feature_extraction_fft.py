@@ -72,6 +72,8 @@ def validation_extraction(df_raw: pd.DataFrame, df_not_bad_data: pd.DataFrame, f
                     lista_elite.append(feats)
 
     df_final = pd.DataFrame(lista_elite)
+    if df_final.empty:
+        return pd.DataFrame(columns=['ecg_id', 'segment_id', 'label'])
     
     # organiza
     cols_ordem = ['ecg_id', 'segment_id', 'label'] + [c for c in df_final.columns if c not in ['ecg_id', 'segment_id', 'label']]

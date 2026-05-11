@@ -6,6 +6,8 @@ import seaborn as sns
 from mpl_toolkits.mplot3d import Axes3D
 import numpy as np
 from sklearn.decomposition import PCA
+from pathlib import Path
+import re
 
 
 LEADS = ["I", "II", "III", "AVR", "AVL", "AVF", "V1", "V2", "V3", "V4", "V5", "V6"]
@@ -62,7 +64,18 @@ def remove_outliers(df: pd.DataFrame, label_col='label', threshold=0.001):
 
     return pd.concat(df_final).reset_index(drop=True)
 
-def plotar_ica_estatico(df_ica, title:str=""):
+def _to_filename(text: str) -> str:
+    sanitized = re.sub(r"[^a-zA-Z0-9]+", "_", text.strip().lower()).strip("_")
+    return sanitized or "ica_plot"
+
+
+def plotar_ica_estatico(
+    df_ica,
+    title: str = "",
+    output_dir: str | Path | None = None,
+    file_prefix: str | None = None,
+    show_plot: bool = True,
+):
     df_ica = df_ica.copy()
     df_ica['Label'] = df_ica['Label'].astype(str)
     df_ica = df_ica[~df_ica['Label'].isin(['nan', 'NaN', 'None', 'n/a', ''])]
@@ -85,12 +98,31 @@ def plotar_ica_estatico(df_ica, title:str=""):
     ax.set_zlabel('IC3')
     ax.legend(title="Diagnóstico", bbox_to_anchor=(1.05, 1), loc='upper left')
     plt.tight_layout()
-    plt.show()
+    output_path = None
+    if output_dir is not None:
+        output_path = Path(output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+        prefix = file_prefix or _to_filename(title)
+        fig.savefig(output_path / f"{prefix}_3d.png", dpi=220, bbox_inches="tight")
+
+    if show_plot:
+        plt.show()
+    plt.close(fig)
 
     g = sns.pairplot(df_ica, hue='Label', palette='viridis', 
                      diag_kind='kde', plot_kws={'alpha': 0.5, 's': 20})
     g.figure.suptitle(f"{title} - pairplot", fontsize=12)
-    plt.show()
+    g.figure.tight_layout()
+
+    if output_path is not None:
+        prefix = file_prefix or _to_filename(title)
+        g.figure.savefig(
+            output_path / f"{prefix}_pairplot.png", dpi=220, bbox_inches="tight"
+        )
+
+    if show_plot:
+        plt.show()
+    plt.close(g.figure)
 
 def PCA_SIMPLE(df_elite, n_components=3):
     """
