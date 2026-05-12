@@ -682,7 +682,7 @@ if __name__ == "__main__":
 
     df_filtered = ECGSignalCleaner.clean_signals(
         df_raw_filtrado_sqi,
-        ["I", "II", "III", "AVR", "AVL", "AVF", "V1", "V2", "V3", "V4", "V5", "V6"],
+        ["I", "II", "III", "V3", "V6"],
     )
 
     print(df_filtered.head())

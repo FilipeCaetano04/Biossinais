@@ -8,7 +8,7 @@ from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import StandardScaler
 
 
-LEADS = ["I", "II", "III", "AVR", "AVL", "AVF", "V1", "V2", "V3", "V4", "V5", "V6"]
+LEADS = ["I", "II", "III", "V3", "V6"]
 FEATURE_COLS = [f"mean_{lead}" for lead in LEADS]
 
 

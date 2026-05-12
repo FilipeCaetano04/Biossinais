@@ -10,7 +10,7 @@ from pathlib import Path
 import re
 
 
-LEADS = ["I", "II", "III", "AVR", "AVL", "AVF", "V1", "V2", "V3", "V4", "V5", "V6"]
+LEADS = ["I", "II", "III", "V3", "V6"]
 FEATURE_COLS = [f"mean_{lead}" for lead in LEADS if lead not in ["II", "III", "AVR"]]
 FEATURE_MEAN = [f'median_{lead}' for lead in LEADS if lead not in ["II", "III", "AVR"]]
 FEATURE_STD = [f'std_{lead}' for lead in LEADS if lead not in ["II", "III", "AVR"]]

@@ -9,7 +9,7 @@ import seaborn as sns
 from scipy import stats
 
 
-LEADS: List[str] = ["I", "II", "III", "AVR", "AVL", "AVF", "V1", "V2", "V3", "V4", "V5", "V6"]
+LEADS: List[str] = ["I", "II", "III", "V3", "V6"]
 
 
 def load_raw_data(csv_path: str = "data/raw_data.csv") -> pd.DataFrame:

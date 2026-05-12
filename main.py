@@ -125,14 +125,7 @@ def run_pipeline(
                     "I",
                     "II",
                     "III",
-                    "AVR",
-                    "AVL",
-                    "AVF",
-                    "V1",
-                    "V2",
                     "V3",
-                    "V4",
-                    "V5",
                     "V6",
                 ],
                 fs=fs,
@@ -312,7 +305,7 @@ def run_pipeline(
     df_raw.to_csv(raw_csv, index=False)
     df_raw_filtered = ECGSignalCleaner.clean_signals(
         df_raw,
-        ["I", "II", "III", "AVR", "AVL", "AVF", "V1", "V2", "V3", "V4", "V5", "V6"],
+        ["I", "II", "III", "V3", "V6"],
     )
     df_quality = SignalQualityEvaluator.evaluate_quality(
         df_raw_filtered, fs=fs, window_sec=window_sec
