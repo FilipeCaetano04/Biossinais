@@ -335,9 +335,9 @@ def run_pipeline(
     # print("[3/5] Removendo outliers (FFT features)")
     # df_features = remove_outliers(df_features, threshold=0.001)
     # opcional balanceia pelo menor:
-    df_features = SignalQualityEvaluator.balancear_classes_undersampling(
-        df_features, max_ratio=2
-    )
+    # df_features = SignalQualityEvaluator.balancear_classes_undersampling(
+    #     df_features, max_ratio=2
+    # )
 
     print("[4/5] Rodando extração de features via wavelet")
     df_features_novas = gerar_features_clinicas(df_raw, df_filtered_sqi)

@@ -124,7 +124,7 @@ def plotar_ica_estatico(
         plt.show()
     plt.close(g.figure)
 
-def PCA_SIMPLE(df_elite, n_components=3):
+def PCA_SIMPLE(df_elite, n_components=3, return_metadata=False):
     """
     Executa o PCA nas features selecionadas
     """
@@ -137,7 +137,8 @@ def PCA_SIMPLE(df_elite, n_components=3):
 
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
-    pca = PCA(n_components=n_components, random_state=42)
+    max_components = min(n_components, X_scaled.shape[0], X_scaled.shape[1])
+    pca = PCA(n_components=max_components, random_state=42)
     X_pca = pca.fit_transform(X_scaled)
 
     var_exp = pca.explained_variance_ratio_ * 100
@@ -146,8 +147,11 @@ def PCA_SIMPLE(df_elite, n_components=3):
         print(f"   - PC{i+1}: {v:.2f}% da variância")
     print(f"   - Total acumulado: {np.sum(var_exp):.2f}%")
 
-    col_names = [f'PC{i+1}' for i in range(n_components)]
+    col_names = [f'PC{i+1}' for i in range(max_components)]
     df_pca = pd.DataFrame(X_pca, columns=col_names)
     df_pca['Label'] = labels.values # Mantendo o alinhamento
-    
+
+    if return_metadata:
+        return df_pca, pca, scaler, features
+
     return df_pca
