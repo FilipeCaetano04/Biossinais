@@ -46,7 +46,6 @@ def remove_outliers(df: pd.DataFrame, label_col='label', threshold=0.001):
 
     for classe in df[label_col].unique():
         df_classe = df[df[label_col] == classe].copy()
-        antes = len(df_classe)
         
         # 1. Calcula limites de todas as colunas de uma vez
         limite_inf = df_classe[cols_numericas].quantile(threshold)
@@ -59,7 +58,7 @@ def remove_outliers(df: pd.DataFrame, label_col='label', threshold=0.001):
         mask_todas_colunas_ok = mask.all(axis=1)
         df_classe = df_classe[mask_todas_colunas_ok]
         
-        print(f"  - Classe {classe}: removidos {antes - len(df_classe)} outliers. Restaram: {len(df_classe)}")
+        print(f"  - Classe {classe}: outlier filtering concluido.")
         df_final.append(df_classe)
 
     return pd.concat(df_final).reset_index(drop=True)

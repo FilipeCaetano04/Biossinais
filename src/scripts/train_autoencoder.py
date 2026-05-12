@@ -114,7 +114,10 @@ def train_autoencoder(
     optimizer,
     device,
     num_epochs=200,
+    return_history=False,
 ):
+    history = {"epoch": [], "train_loss": [], "val_loss": []}
+
     for epoch in range(num_epochs):
         model.train()
         train_loss = 0.0
@@ -147,12 +150,46 @@ def train_autoencoder(
 
         val_loss /= len(val_loader.dataset)
 
+        history["epoch"].append(epoch + 1)
+        history["train_loss"].append(train_loss)
+        history["val_loss"].append(val_loss)
+
         if (epoch + 1) % 10 == 0:
             print(
                 f"Epoch [{epoch + 1}/{num_epochs}] "
                 f"Train Loss: {train_loss:.6f} "
                 f"Val Loss: {val_loss:.6f}"
             )
+
+    if return_history:
+        return history
+
+    return None
+
+
+def save_loss_history_and_plot(history, output_dir):
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    df_history = pd.DataFrame(history)
+    history_csv_path = output_dir / "autoencoder_loss_history.csv"
+    df_history.to_csv(history_csv_path, index=False)
+
+    plt.figure(figsize=(9, 6))
+    plt.plot(df_history["epoch"], df_history["train_loss"], label="Train Loss")
+    plt.plot(df_history["epoch"], df_history["val_loss"], label="Val Loss")
+    plt.title("AutoEncoder - Train and Validation Loss")
+    plt.xlabel("Epoch")
+    plt.ylabel("MSE Loss")
+    plt.grid(alpha=0.3)
+    plt.legend()
+    plt.tight_layout()
+
+    history_plot_path = output_dir / "autoencoder_train_val_loss.png"
+    plt.savefig(history_plot_path, dpi=220, bbox_inches="tight")
+    plt.close()
+
+    return history_csv_path, history_plot_path
 
 
 def build_latent_dataframe(model, X_tensor, metadata, latent_dim, device):
@@ -336,6 +373,7 @@ def run_autoencoder_from_dataframe(
     num_epochs=200,
     n_pca_components=3,
     seed=42,
+    save_loss_artifacts=False,
 ):
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -352,7 +390,7 @@ def run_autoencoder_from_dataframe(
         input_dim=X_scaled.shape[1], latent_dim=latent_dim, device=device
     )
 
-    train_autoencoder(
+    history = train_autoencoder(
         model=model,
         train_loader=train_loader,
         val_loader=val_loader,
@@ -360,7 +398,15 @@ def run_autoencoder_from_dataframe(
         optimizer=optimizer,
         device=device,
         num_epochs=num_epochs,
+        return_history=save_loss_artifacts,
     )
+
+    loss_history_path = None
+    loss_plot_path = None
+    if save_loss_artifacts and history is not None:
+        loss_history_path, loss_plot_path = save_loss_history_and_plot(
+            history, output_dir
+        )
 
     ae_df, latent = build_latent_dataframe(
         model=model,
@@ -388,6 +434,8 @@ def run_autoencoder_from_dataframe(
     return {
         "latent_scores_path": latent_scores_path,
         "latent_pca_scores_path": latent_pca_scores_path,
+        "loss_history_path": loss_history_path,
+        "loss_plot_path": loss_plot_path,
         "feature_columns": feature_cols,
         "input_shape": X_scaled.shape,
         "latent_shape": latent.shape,

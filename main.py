@@ -44,7 +44,7 @@ def run_pipeline(
     data_label: str = "./data500/ptbxl_database.csv",
     scp_path: str = "./data500/scp_statements.csv",
     shuffle: bool = False,
-    batch_size: int = 500,
+    batch_size: int = 5000,
     fs: int = 500,
     window_sec: int = 2,
     autoencoder_latent_dim: int = 15,
@@ -119,6 +119,8 @@ def run_pipeline(
                 selected_ids=batch_ids,
                 record_index=record_index,
             )
+            print(f"[BATCH {batch_idx}/{total_batches}] data loading finished")
+
             df_raw_filtered = ECGSignalCleaner.clean_signals(
                 df_raw,
                 [
@@ -137,10 +139,13 @@ def run_pipeline(
                 ],
                 fs=fs,
             )
+            print(f"[BATCH {batch_idx}/{total_batches}] signal cleaning finished")
+
             df_quality = SignalQualityEvaluator.evaluate_quality(
                 df_raw_filtered, fs=fs, window_sec=window_sec
             )
             _append_csv(df_quality, quality_all_csv)
+            print(f"[BATCH {batch_idx}/{total_batches}] quality evaluation finished")
 
             if df_quality.empty:
                 print(
@@ -161,9 +166,36 @@ def run_pipeline(
                 df_features = validation_extraction(
                     df_raw_filtered, df_filtered_sqi, freq=fs
                 )
+                print(
+                    f"[BATCH {batch_idx}/{total_batches}] FFT feature extraction finished"
+                )
+
                 df_features_novas = gerar_features_clinicas(
                     df_raw, df_filtered_sqi, freq=fs
                 )
+                print(
+                    f"[BATCH {batch_idx}/{total_batches}] wavelet feature extraction finished"
+                )
+
+                if not df_features.empty:
+                    print(
+                        f"[BATCH {batch_idx}/{total_batches}] removing outliers (FFT features)..."
+                    )
+                    df_features = remove_outliers(df_features, threshold=0.001)
+                    print(
+                        f"[BATCH {batch_idx}/{total_batches}] FFT outlier removal finished"
+                    )
+
+                if not df_features_novas.empty:
+                    print(
+                        f"[BATCH {batch_idx}/{total_batches}] removing outliers (wavelet features)..."
+                    )
+                    df_features_novas = remove_outliers(
+                        df_features_novas, threshold=0.001
+                    )
+                    print(
+                        f"[BATCH {batch_idx}/{total_batches}] wavelet outlier removal finished"
+                    )
 
             _append_csv(df_features, features_stats_csv)
             _append_csv(df_features_novas, features_wavelet_csv)
@@ -172,13 +204,8 @@ def run_pipeline(
                 df_raw, df_quality, LEADS, fs=fs
             )
             _append_csv(df_segmented, segmented_stats_csv)
-
-            print(
-                f"[BATCH {batch_idx}/{total_batches}] done | "
-                f"quality={len(df_quality)} rows, "
-                f"fft_features={len(df_features)} rows, "
-                f"wavelet_features={len(df_features_novas)} rows"
-            )
+            print(f"[BATCH {batch_idx}/{total_batches}] segmented statistics finished")
+            print(f"[BATCH {batch_idx}/{total_batches}] done")
 
             del df_raw
             del df_raw_filtered
@@ -429,4 +456,4 @@ def run_pipeline(
 
 
 if __name__ == "__main__":
-    run_pipeline(process_all=True, batch_size=500)
+    run_pipeline(process_all=True, batch_size=5000)
