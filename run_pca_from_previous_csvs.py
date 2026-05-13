@@ -23,16 +23,20 @@ def build_variance_table(pca_model) -> pd.DataFrame:
 
 
 def main() -> None:
-    output_dir = Path("data/pca_previous_run_outputs")
+    output_dir = Path("data/pca_previous_run_outputs_without_outliers")
     pca_output_dir = output_dir / "pca"
     ica_output_dir = output_dir / "ica"
     output_dir.mkdir(parents=True, exist_ok=True)
 
     stats_csv = Path(
-        "data/statistical_analysis_outputs/descriptive_statistics_segmented.csv"
+        "data/statistical_analysis_outputs_without_outliers/descriptive_statistics_segmented.csv"
     )
-    features_stats_csv = Path("data/batch_outputs/features_stats_all.csv")
-    features_wavelet_csv = Path("data/batch_outputs/features_wavelet_all.csv")
+    features_stats_csv = Path(
+        "data/batch_outputs_without_outliers/features_stats_all.csv"
+    )
+    features_wavelet_csv = Path(
+        "data/batch_outputs_without_outliers/features_wavelet_all.csv"
+    )
 
     if not stats_csv.exists():
         raise FileNotFoundError(f"Arquivo nao encontrado: {stats_csv}")
