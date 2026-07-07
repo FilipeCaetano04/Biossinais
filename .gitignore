@@ -5,4 +5,4 @@ __pycache__/
 ignored_data/
 
 # Ignore generated datasets/results
-*.csv
+data/**/*.csv
