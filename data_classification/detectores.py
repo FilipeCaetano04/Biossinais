@@ -2,13 +2,12 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from sklearn import neighbors
 from scipy.stats import chi2
 from sklearn.metrics import confusion_matrix
 
 #distancias euclideanas
 class distanciaminimacentroide:
-    def __init__(self, robusto, alpha = 0.05):
+    def __init__(self, robusto, alpha = 0.20):
         self.robusto = robusto
         self.limiar = None
         self.alpha = alpha
@@ -60,7 +59,7 @@ class knn:
         return np.array(predicoes)
 
 class Mahalanobis():
-    def __init__(self, alpha = 0.05, metodo="chi2"):
+    def __init__(self, alpha = 0.20, metodo="chi2"):
         self.alpha = alpha
         self.metodo = metodo
         self.centroids = None
@@ -93,7 +92,7 @@ class Mahalanobis():
         distancias = self.mahalanobis_distance(x_test)
         return np.where(distancias > self.k, 1, -1)
 class PCA:
-    def __init__(self, n_components, alpha=0.05, metodo="chi2"):
+    def __init__(self, n_components, alpha=0.20, metodo="chi2"):
         self.n_components = n_components
         self.Q = None
         self.alpha = alpha
@@ -146,6 +145,7 @@ class PCA:
 
 
 def pca(X, Y):
+    Y = np.asarray(Y).ravel()
     n_features, n_samples = X.shape
     p_trn = 0.8  # Porcentagem de dados para treino
     epochs = 100  
@@ -177,6 +177,7 @@ def pca(X, Y):
         # Concatena os dados de teste (Positivos + Negativos de teste)
         X_tst = np.hstack((X_pos, X_neg_tst))
         Y_tst = np.concatenate((Y_pos, Y_neg_tst))
+        Y_tst = np.asarray(Y_tst).ravel().astype(int)
         n_tst = X_tst.shape[1]
 
         # Normalização dos conjuntos (baseado no treino negativo)
@@ -190,7 +191,7 @@ def pca(X, Y):
         X_neg_trn_norm = (X_neg_trn - me) / se
         X_tst_norm = (X_tst - me) / se
 
-        pca_model = PCA(n_components=2, alpha=0.05, metodo="chi2")
+        pca_model = PCA(n_components=5, alpha=0.20, metodo="chi2")
         pca_model.fit(X_neg_trn_norm.T)  
         Y_pred = pca_model.predict(X_tst_norm.T)
         vn, fp, fn, vp = confusion_matrix(Y_tst, Y_pred, labels=[-1, 1]).ravel()
@@ -351,7 +352,7 @@ def mahala(X, Y):
         Ntst = Xtst.shape[1]
 
         Xtst = (Xtst - me) / se  # Normaliza dados de teste com estatísticas dos dados de treino
-        model = Mahalanobis(alpha=0.05, metodo="percentil")
+        model = Mahalanobis(alpha=0.20, metodo="percentil")
         model.fit(Xneg_trn.T)
         Ypred_all = model.predict(Xtst.T)
         prod_rotulos = Ytst * Ypred_all  # Produto Schur dos rótulos reais e preditos
@@ -394,3 +395,21 @@ def mahala(X, Y):
     for i, metrica in enumerate(metricas):
         print(f"{metrica}: Média = {STATS_MEAN[i]:.2f}% | Desvio Padrão = {STATS_STD[i]:.2f}%")
 
+if __name__ == "__main__":
+    df1 = pd.read_csv("fft_extracted_features_NORM.csv")
+    df2 = pd.read_csv("fft_extracted_features_MI.csv")  # Substitua pelo caminho do seu arquivo CSV
+    resultado = pd.concat([df1, df2], ignore_index=True)
+    resultado = resultado.drop(columns=['Unnamed: 0', 'ecg_id', 'segment_id' ])
+    resultado['label'] = resultado["label"].replace({"NORM": -1, "MI": 1})  
+    Y = resultado['label']
+    X = resultado.drop(columns=['label']).values.T 
+    Y = np.asarray(Y) 
+    X= np.asarray(X, dtype=float)
+    print("Executando PCA...")
+    pca(X, Y)
+
+    print("\nExecutando Distância Euclidiana...")
+    euclidiana(X, Y)
+
+    print("\nExecutando Distância de Mahalanobis...")
+    mahala(X, Y)
