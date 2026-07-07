@@ -191,7 +191,7 @@ def pca(X, Y):
         X_neg_trn_norm = (X_neg_trn - me) / se
         X_tst_norm = (X_tst - me) / se
 
-        pca_model = PCA(n_components=5, alpha=0.20, metodo="chi2")
+        pca_model = PCA(n_components=5, alpha=0.20, metodo="percentil")
         pca_model.fit(X_neg_trn_norm.T)  
         Y_pred = pca_model.predict(X_tst_norm.T)
         vn, fp, fn, vp = confusion_matrix(Y_tst, Y_pred, labels=[-1, 1]).ravel()
