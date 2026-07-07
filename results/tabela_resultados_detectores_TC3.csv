@@ -1,0 +1,4 @@
+Modelo,Acurácia,Sensibilidade,Especificidade,Precisão,F1-escore,Tempo de execução treino,Tempo de execução teste
+PCA (Autoencoder Linear),68.2% ± 0.5,60.5% ± 0.8,79.9% ± 1.4,81.9% ± 0.9,69.6% ± 0.5,69.5ms ± 0.5,16.4ms ± 10.0
+Distancia Euclidiana,66.4% ± 0.4,57.4% ± 0.3,79.9% ± 1.3,81.1% ± 1.0,67.2% ± 0.3,67.7ms ± 0.5,3.6ms ± 0.9
+Distancia Mahalanobis,72.2% ± 0.5,67.5% ± 0.4,79.3% ± 1.6,83.1% ± 1.0,74.5% ± 0.3,73.2ms ± 0.6,10.0ms ± 4.3
