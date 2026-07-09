@@ -96,7 +96,7 @@ class Mahalanobis:
         return np.where(distancias > self.k, 1, -1)
 
 
-class PCA:
+class PCADetector:
     def __init__(self, n_components, alpha=0.20, metodo="chi2"):
         self.n_components = n_components
         self.Q = None
@@ -208,7 +208,7 @@ def pca(X, Y):
         X_neg_trn_norm = (X_neg_trn - me) / se
         X_tst_norm = (X_tst - me) / se
 
-        pca_model = PCA(n_components=5, alpha=0.20, metodo="percentil")
+        pca_model = PCADetector(n_components=5, alpha=0.20, metodo="percentil")
         inicio_treino = time.perf_counter()
         pca_model.fit(X_neg_trn_norm.T)
         fim_treino = time.perf_counter()
