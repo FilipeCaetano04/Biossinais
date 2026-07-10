@@ -34,7 +34,7 @@ def validation_extraction(df_raw: pd.DataFrame, df_not_bad_data: pd.DataFrame, f
     Adaptado para o formato de segmento 'seg_XaYs'.
     """
     amostras_por_segmento = int(2 * freq) # 1000 linhas = 2 segundos
-    LEADS = ['I', 'II', 'III', 'AVR', 'AVL', 'AVF', 'V1', 'V2', 'V3', 'V4', 'V5', 'V6']
+    LEADS = ["I", "II", "III", "V3", "V6"]
     
     grouped_raw = df_raw.groupby('ecg_id')
     

@@ -1,0 +1,2 @@
+Posto da Matriz Normal (X_norm): 40
+Posto da Matriz Anormal (X_anorm): 40

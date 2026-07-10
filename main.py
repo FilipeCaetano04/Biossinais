@@ -19,7 +19,7 @@ from src.aquisicao_filtragem.wavelet import gerar_features_clinicas
 from src.dimensionality_reduction.pca_from_statistical_analysis import (
     main as run_pca_statistic,
 )
-from src.scripts.train_autoencoder import run_autoencoder_from_dataframe
+#from src.scripts.train_autoencoder import run_autoencoder_from_dataframe
 
 
 def _append_csv(df: pd.DataFrame | None, output_path: Path) -> None:
@@ -52,6 +52,7 @@ def run_pipeline(
 ) -> None:
     data_dir = Path("./data")
     stats_output_dir = data_dir / "statistical_analysis_outputs_without_outliers"
+    features_fft_csv = data_dir/"fft_extracted_features.csv"
     pca_output_dir = stats_output_dir / "pca"
     ica_output_dir = stats_output_dir / "ica"
     autoencoder_stats_output_dir = stats_output_dir / "autoencoder_feature_stats"
@@ -352,6 +353,7 @@ def run_pipeline(
 
     print("[3/5] Rodando extração de features de energia para segmento")
     df_features = validation_extraction(df_raw_filtered, df_filtered_sqi)
+    df_features.to_csv(features_fft_csv)
     # print("[3/5] Removendo outliers (FFT features)")
     # df_features = remove_outliers(df_features, threshold=0.001)
     # opcional balanceia pelo menor:
@@ -359,94 +361,94 @@ def run_pipeline(
     #     df_features, max_ratio=2
     # )
 
-    print("[4/5] Rodando extração de features via wavelet")
-    df_features_novas = gerar_features_clinicas(df_raw, df_filtered_sqi)
+    #print("[4/5] Rodando extração de features via wavelet")
+    #df_features_novas = gerar_features_clinicas(df_raw, df_filtered_sqi)
     # print("[4/5] Removendo outliers (wavelet features)")
     # df_features_novas = remove_outliers(df_features_novas, threshold=0.001)
 
-    print("[5/5] Rodando pca´s, ica e autoencoder")
-    run_pca_statistic(
-        input_csv=stats_output_dir / "descriptive_statistics_segmented.csv",
-        output_dir=pca_output_dir,
-        save_outputs=True,
-    )
-    df_ica_features_stats = ICA(
-        df_features,
-        feature_cols=[
-            col
-            for col in df_features.columns
-            if col not in ["ecg_id", "segment_id", "label"]
-        ],
-    )
-    df_pca_features_stats = PCA_SIMPLE(df_features, n_components=5)
-    plotar_ica_estatico(
-        df_ica_features_stats,
-        "ICA FEATURE STATS",
-        output_dir=ica_output_dir,
-        file_prefix="ica_feature_stats",
-        show_plot=False,
-    )
-    plotar_ica_estatico(
-        df_pca_features_stats,
-        "PCA FEATURE STATS",
-        output_dir=ica_output_dir,
-        file_prefix="pca_feature_stats",
-        show_plot=False,
-    )
-    df_ica = ICA(
-        df_features_novas,
-        feature_cols=[
-            col
-            for col in df_features_novas.columns
-            if col not in ["ecg_id", "segment_id", "label"]
-        ],
-    )
-    df_pca = PCA_SIMPLE(df_features_novas, n_components=5)
-    plotar_ica_estatico(
-        df_ica,
-        "ICA FEATURES WAVELET",
-        output_dir=ica_output_dir,
-        file_prefix="ica_features_wavelet",
-        show_plot=False,
-    )
-    plotar_ica_estatico(
-        df_pca,
-        "PCA FEATURES WAVELET",
-        output_dir=ica_output_dir,
-        file_prefix="pca_features_wavelet",
-        show_plot=False,
-    )
+    # print("[5/5] Rodando pca´s, ica e autoencoder")
+    # run_pca_statistic(
+    #     input_csv=stats_output_dir / "descriptive_statistics_segmented.csv",
+    #     output_dir=pca_output_dir,
+    #     save_outputs=True,
+    # )
+    # df_ica_features_stats = ICA(
+    #     df_features,
+    #     feature_cols=[
+    #         col
+    #         for col in df_features.columns
+    #         if col not in ["ecg_id", "segment_id", "label"]
+    #     ],
+    # )
+    # df_pca_features_stats = PCA_SIMPLE(df_features, n_components=5)
+    # plotar_ica_estatico(
+    #     df_ica_features_stats,
+    #     "ICA FEATURE STATS",
+    #     output_dir=ica_output_dir,
+    #     file_prefix="ica_feature_stats",
+    #     show_plot=False,
+    # )
+    # plotar_ica_estatico(
+    #     df_pca_features_stats,
+    #     "PCA FEATURE STATS",
+    #     output_dir=ica_output_dir,
+    #     file_prefix="pca_feature_stats",
+    #     show_plot=False,
+    # )
+    # df_ica = ICA(
+    #     df_features_novas,
+    #     feature_cols=[
+    #         col
+    #         for col in df_features_novas.columns
+    #         if col not in ["ecg_id", "segment_id", "label"]
+    #     ],
+    # )
+    # df_pca = PCA_SIMPLE(df_features_novas, n_components=5)
+    # plotar_ica_estatico(
+    #     df_ica,
+    #     "ICA FEATURES WAVELET",
+    #     output_dir=ica_output_dir,
+    #     file_prefix="ica_features_wavelet",
+    #     show_plot=False,
+    # )
+    # plotar_ica_estatico(
+    #     df_pca,
+    #     "PCA FEATURES WAVELET",
+    #     output_dir=ica_output_dir,
+    #     file_prefix="pca_features_wavelet",
+    #     show_plot=False,
+    # )
 
-    ae_result_stats = run_autoencoder_from_dataframe(
-        df=df_features,
-        output_dir=autoencoder_stats_output_dir,
-        latent_dim=autoencoder_latent_dim,
-        num_epochs=autoencoder_epochs,
-        n_pca_components=3,
-    )
-    ae_result_wavelet = run_autoencoder_from_dataframe(
-        df=df_features_novas,
-        output_dir=autoencoder_wavelet_output_dir,
-        latent_dim=autoencoder_latent_dim,
-        num_epochs=autoencoder_epochs,
-        n_pca_components=3,
-    )
-    print(
-        f"Autoencoder FFT concluido. Latente: {ae_result_stats['latent_shape']} | "
-        f"Saidas: {autoencoder_stats_output_dir}"
-    )
-    print(
-        f"Autoencoder wavelet concluido. Latente: {ae_result_wavelet['latent_shape']} | "
-        f"Saidas: {autoencoder_wavelet_output_dir}"
-    )
+    # ae_result_stats = run_autoencoder_from_dataframe(
+    #     df=df_features,
+    #     output_dir=autoencoder_stats_output_dir,
+    #     latent_dim=autoencoder_latent_dim,
+    #     num_epochs=autoencoder_epochs,
+    #     n_pca_components=3,
+    # )
+    # ae_result_wavelet = run_autoencoder_from_dataframe(
+    #     df=df_features_novas,
+    #     output_dir=autoencoder_wavelet_output_dir,
+    #     latent_dim=autoencoder_latent_dim,
+    #     num_epochs=autoencoder_epochs,
+    #     n_pca_components=3,
+    # )
+    # print(
+    #     f"Autoencoder FFT concluido. Latente: {ae_result_stats['latent_shape']} | "
+    #     f"Saidas: {autoencoder_stats_output_dir}"
+    # )
+    # print(
+    #     f"Autoencoder wavelet concluido. Latente: {ae_result_wavelet['latent_shape']} | "
+    #     f"Saidas: {autoencoder_wavelet_output_dir}"
+    # )
 
-    print("Pipeline concluido com sucesso.")
-    print(f"Saidas estatisticas em: {stats_output_dir}")
-    print(f"Saidas PCA em: {pca_output_dir}")
-    print(f"Saidas ICA em: {ica_output_dir}")
-    print(f"Saidas Autoencoder FFT em: {autoencoder_stats_output_dir}")
-    print(f"Saidas Autoencoder wavelet em: {autoencoder_wavelet_output_dir}")
+    # print("Pipeline concluido com sucesso.")
+    # print(f"Saidas estatisticas em: {stats_output_dir}")
+    # print(f"Saidas PCA em: {pca_output_dir}")
+    # print(f"Saidas ICA em: {ica_output_dir}")
+    # print(f"Saidas Autoencoder FFT em: {autoencoder_stats_output_dir}")
+    # print(f"Saidas Autoencoder wavelet em: {autoencoder_wavelet_output_dir}")
 
 
 if __name__ == "__main__":
-    run_pipeline(process_all=True, batch_size=5000)
+    run_pipeline(process_all=False,number_of_pacients=2000)
