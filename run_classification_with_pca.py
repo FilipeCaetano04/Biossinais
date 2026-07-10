@@ -21,17 +21,17 @@ from src.classification.detectores import (
     gerar_linha_resultado,
 )
 
-DATA_PATH = Path("data_classification/fft_extracted_features.csv")
+DATA_DIR = Path("data_classification")
 RANDOM_SEED = 42
 EPOCHS = 100
 TRAIN_RATIO = 0.8
 VARIANCIA_ALVO = 0.95
 
 
-def load_data(csv_path: str | Path) -> tuple[np.ndarray, np.ndarray]:
-    df = pd.read_csv(csv_path)
-    if "Unnamed: 0" in df.columns:
-        df = df.drop(columns=["Unnamed: 0"])
+def load_data() -> tuple[np.ndarray, np.ndarray]:
+    df_norm = pd.read_csv(DATA_DIR / "fft_extracted_features_NORM.csv", index_col=0)
+    df_mi = pd.read_csv(DATA_DIR / "fft_extracted_features_MI.csv", index_col=0)
+    df = pd.concat([df_norm, df_mi], ignore_index=True)
     df = df.drop(columns=["ecg_id", "segment_id"], errors="ignore")
     df["label"] = df["label"].replace({"NORM": -1, "MI": 1})
     Y = df["label"].values.ravel()
@@ -70,9 +70,7 @@ def plot_ve_vs_q(
     plt.show()
 
 
-def escolher_q_primeira_rodada(
-    X: np.ndarray, Y: np.ndarray
-) -> tuple[int, np.ndarray]:
+def escolher_q_primeira_rodada(X: np.ndarray, Y: np.ndarray) -> tuple[int, np.ndarray]:
     n_samples = X.shape[1]
     rng = np.random.default_rng(RANDOM_SEED)
 
@@ -115,6 +113,7 @@ def avaliar_detector_com_pca(
     rng = np.random.default_rng(RANDOM_SEED)
     perf_list = []
 
+    pca = PCA(n_components=q_fixo)
     for epoch in range(EPOCHS):
         idx_perm = rng.permutation(n_samples)
         X_shuffled = X[:, idx_perm]
@@ -143,7 +142,6 @@ def avaliar_detector_com_pca(
         X_neg_trn_norm = (X_neg_trn - me) / se
         X_tst_norm = (X_tst - me) / se
 
-        pca = PCA(n_components=q_fixo)
         X_trn = pca.fit_transform(X_neg_trn_norm.T)
         X_tst_pca = pca.transform(X_tst_norm.T)
 
@@ -172,7 +170,9 @@ def avaliar_detector_com_pca(
         prec = 100 * vp / (vp + fp) if (vp + fp) > 0 else 0
         f1 = (2 * prec * sens / (prec + sens)) if (prec + sens) > 0 else 0
 
-        perf_list.append([acc, sens, espec, prec, f1, tempo_treino * 1000, tempo_teste * 1000])
+        perf_list.append(
+            [acc, sens, espec, prec, f1, tempo_treino * 1000, tempo_teste * 1000]
+        )
 
     PERF = np.array(perf_list)
     return gerar_linha_resultado(nome, PERF)
@@ -183,7 +183,7 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
 
     print("Carregando dados...")
-    X, Y = load_data(DATA_PATH)
+    X, Y = load_data()
     n_norm = np.sum(Y < 0)
     n_anom = np.sum(Y > 0)
     print(f"Dados carregados: X {X.shape}, Y {Y.shape}")
@@ -203,7 +203,8 @@ def main():
 
     print("\n=== Distância Euclidiana Mínima com PCA ===")
     res_euc = avaliar_detector_com_pca(
-        X, Y,
+        X,
+        Y,
         detector_class=distanciaminimacentroide,
         detector_kwargs={"robusto": False},
         nome="Distancia Euclidiana",
@@ -214,7 +215,8 @@ def main():
 
     print("\n=== Distância de Mahalanobis com PCA ===")
     res_mah = avaliar_detector_com_pca(
-        X, Y,
+        X,
+        Y,
         detector_class=Mahalanobis,
         detector_kwargs={"alpha": 0.20, "metodo": "percentil"},
         nome="Distancia Mahalanobis",
