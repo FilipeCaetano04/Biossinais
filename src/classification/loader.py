@@ -23,3 +23,14 @@ if __name__ == "__main__":
     for p in PATHS:
         load = Loader(p)
         load.separate_by_label(['MI','NORM'])
+
+    PATHS = ["./data_classification/fft_extracted_features_NORM.csv","./data_classification/fft_extracted_features_MI.csv"]
+
+    for p in PATHS:
+        df = pd.read_csv(p,index_col=0)
+        print("Tamanho de segmentos:\n", len(df))
+
+    PATH = './data/raw_data.csv'
+
+    df = pd.read_csv(PATH,index_col=0)
+    print("Quantidade de pacientes unicos:\n",df.value_counts(['label'])/5000)
